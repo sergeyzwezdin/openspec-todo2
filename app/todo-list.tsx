@@ -19,6 +19,9 @@ type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
 /** Fields accepted by `PATCH /api/todos/{id}`. */
 type TodoPatch = { title?: string; completed?: boolean };
 
+/** Called after a confirmed PATCH flipped `completed`, in either direction. */
+type TodoListProps = { onCompletionChange?: () => void };
+
 /** Callbacks resolve to `true` once the server confirmed the change. */
 type TodoActions = {
   onUpdate: (id: string, patch: TodoPatch) => Promise<boolean>;
@@ -26,7 +29,7 @@ type TodoActions = {
 };
 
 /** Todo list backed by the `/api/todos` API; state changes only after the server confirms. */
-export const TodoList = (): ReactElement => {
+export const TodoList = ({ onCompletionChange }: TodoListProps): ReactElement => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
@@ -59,10 +62,13 @@ export const TodoList = (): ReactElement => {
       setTodos((current) => [...current, created]),
     );
 
-  const updateTodo = async (id: string, patch: TodoPatch): Promise<boolean> =>
-    applyResult(await requestUpdateTodo(id, patch), (updated) =>
-      setTodos((current) => current.map((todo) => (todo.id === updated.id ? updated : todo))),
-    );
+  const updateTodo = async (id: string, patch: TodoPatch): Promise<boolean> => {
+    const previous = todos.find((todo) => todo.id === id);
+    return applyResult(await requestUpdateTodo(id, patch), (updated) => {
+      setTodos((current) => current.map((todo) => (todo.id === updated.id ? updated : todo)));
+      if (previous !== undefined && previous.completed !== updated.completed) onCompletionChange?.();
+    });
+  };
 
   const deleteTodo = async (id: string): Promise<boolean> =>
     applyResult(await requestDeleteTodo(id), () =>
